@@ -1,0 +1,214 @@
+import os
+import socket
+import threading
+import webbrowser
+from flask import Flask, request, jsonify, send_from_directory
+import config
+import database
+from indexador_service import procesar_un_archivo
+from buscador_service import BuscadorLocal
+
+app = Flask(__name__)
+
+# Inicializar Base de datos al arrancar
+database.inicializar_db()
+
+# Inicializar y entrenar el buscador al levantar el servidor
+buscador = BuscadorLocal()
+print("🧠 Entrenando motor de búsqueda local...")
+buscador.entrenar_modelo()
+
+@app.route('/')
+def inicio():
+    return '''
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Mi Biblioteca Inteligente G3</title>
+        <style>
+            /* DISEÑO DE CÓDIGO LIMPIO CON SOPORTE AUTOMÁTICO DE MODO OSCURO */
+            :root {
+                --bg-principal: #f4f4f9;
+                --bg-seccion: #ffffff;
+                --texto: #333333;
+                --texto-secundario: #555555;
+                --borde: #dddddd;
+                --primario: #2C3E50;
+                --exito: #2ECC71;
+            }
+
+            @media (prefers-color-scheme: dark) {
+                :root {
+                    --bg-principal: #121212;
+                    --bg-seccion: #1e1e1e;
+                    --texto: #e0e0e0;
+                    --texto-secundario: #aaaaaa;
+                    --borde: #333333;
+                    --primario: #34495E;
+                    --exito: #27AE60;
+                }
+            }
+
+            body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; background: var(--bg-principal); color: var(--texto); transition: background 0.3s; }
+            h1 { text-align: center; color: var(--texto); }
+            .section { background: var(--bg-seccion); padding: 20px; margin-bottom: 20px; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 1px solid var(--borde); }
+            .search-box, .upload-box { display: flex; gap: 10px; margin-top: 10px; }
+            input[type="text"] { flex: 1; padding: 12px; border: 1px solid var(--borde); border-radius: 4px; font-size: 16px; background: var(--bg-principal); color: var(--texto); }
+            input[type="file"] { padding: 10px; color: var(--texto); }
+            button { padding: 12px 24px; background: var(--primario); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: bold; }
+            button:hover { opacity: 0.9; }
+            .card { background: var(--bg-principal); padding: 15px; margin-top: 15px; border-radius: 4px; border-left: 4px solid var(--primario); border: 1px solid var(--borde); border-left: 4px solid var(--primario); }
+            .meta { font-weight: bold; color: var(--texto-secundario); margin-bottom: 5px; }
+            .snippet { font-style: italic; color: var(--texto-secundario); }
+            .btn-download { display: inline-block; margin-top: 10px; padding: 6px 12px; background: var(--exito); color: white; text-decoration: none; border-radius: 4px; font-size: 14px; font-weight: bold; }
+            #status-upload { margin-top: 10px; font-weight: bold; color: var(--exito); }
+        </style>
+    </head>
+    <body>
+        <h1>📚 Biblioteca Inteligente Hogareña</h1>
+        
+        <!-- PANEL DE INDEXACIÓN (SUBIR ARCHIVOS) -->
+        <div class="section">
+            <h3>📥 Agregar nuevo libro (PDF)</h3>
+            <div class="upload-box">
+                <input type="file" id="archivo-pdf" accept=".pdf,.docx,.txt,.md">
+                <button onclick="subirPDF()">Subir e Indexar</button>
+            </div>
+            <div id="status-upload"></div>
+        </div>
+
+        <!-- PANEL DE BÚSQUEDA -->
+        <div class="section">
+            <h3>🔍 Buscar en la Biblioteca</h3>
+            <div class="search-box">
+                <input type="text" id="pregunta" placeholder="¿Qué querés buscar en tus libros?">
+                <button onclick="buscar()">Buscar</button>
+            </div>
+            <div id="resultados"></div>
+        </div>
+
+        <script>
+            async function subirPDF() {
+                const fileInput = document.getElementById('archivo-pdf');
+                const statusDiv = document.getElementById('status-upload');
+                
+                if (fileInput.files.length === 0) {
+                    alert("Por favor, seleccioná un archivo PDF primero.");
+                    return;
+                }
+                
+                const formData = new FormData();
+                // SOLUCIÓN AL ERROR: Especificamos explícitamente el archivo [0]
+                formData.append("file", fileInput.files[0]);
+                
+                statusDiv.style.color = "#E67E22";
+                statusDiv.innerText = "Enviando e indexando en la netbook... (puede demorar unos segundos)";
+                
+                try {
+                    const response = await fetch('/subir', { method: 'POST', body: formData });
+                    const resultado = await response.json();
+                    
+                    if (resultado.exito) {
+                        statusDiv.style.color = "#2ECC71";
+                        statusDiv.innerText = `✅ ${resultado.mensaje}`;
+                        fileInput.value = ""; 
+                    } else {
+                        statusDiv.style.color = "#E74C3C";
+                        statusDiv.innerText = `❌ Error: ${resultado.mensaje}`;
+                    }
+                } catch (err) {
+                    statusDiv.style.color = "#E74C3C";
+                    statusDiv.innerText = "❌ Error de conexión con el servidor.";
+                }
+            }
+
+            async function buscar() {
+                const query = document.getElementById('pregunta').value;
+                if(!query) return;
+                const resDiv = document.getElementById('resultados');
+                resDiv.innerHTML = "<p style='text-align:center;'>Buscando localmente...</p>";
+                
+                const response = await fetch(`/buscar?q=${encodeURIComponent(query)}`);
+                const datos = await response.json();
+                
+                resDiv.innerHTML = "";
+                if(datos.length === 0) {
+                    resDiv.innerHTML = "<p>No encontré resultados.</p>";
+                    return;
+                }
+                
+                datos.forEach(res => {
+                    resDiv.innerHTML += `
+                        <div class="card">
+                            <div class="meta">📄 ${res.archivo} (Pág. ${res.pagina})</div>
+                            <div class="snippet">"${res.texto}..."</div>
+                            <a class="btn-download" href="/descargar/${encodeURIComponent(res.archivo)}" target="_blank">📥 Descargar Libro</a>
+                        </div>`;
+                });
+            }
+        </script>
+    </body>
+    </html>
+    '''
+
+@app.route('/buscar')
+def api_buscar():
+    query = request.args.get('q', '').strip()
+    if not query: return jsonify([])
+    resultados = buscador.buscar(query)
+    return jsonify(resultados)
+
+@app.route('/subir', methods=['POST'])
+def api_subir():
+    if 'file' not in request.files:
+        return jsonify({"exito": False, "mensaje": "No se envió ningún archivo"})
+        
+    archivo = request.files['file']
+    if archivo.filename == '':
+        return jsonify({"exito": False, "mensaje": "Nombre de archivo vacío"})
+        
+    # Agregamos las nuevas extensiones permitidas
+    extensiones_validas = ('.pdf', '.docx', '.txt', '.md')
+    nombre_archivo = archivo.filename
+    
+    if archivo and nombre_archivo.lower().endswith(extensiones_validas):
+        ruta_destino = os.path.join(config.CARPETA_PDFS, nombre_archivo)
+        
+        # Guardar físicamente en el disco rígido de la netbook
+        archivo.save(ruta_destino)
+        
+        # Llamamos al servicio actualizado (que ahora procesa cualquier formato)
+        exito, resultado = procesar_un_archivo(ruta_destino, nombre_archivo)
+        
+        if exito:
+            buscador.entrenar_modelo() # Re-entrenar el buscador con los nuevos textos
+            return jsonify({"exito": True, "mensaje": f"¡{nombre_archivo} indexado! ({resultado} bloques añadidos)"})
+        else:
+            return jsonify({"exito": False, "mensaje": f"Guardado pero falló la lectura: {resultado}"})
+            
+    return jsonify({"exito": False, "mensaje": "Formato no permitido. Solo se aceptan: .pdf, .docx, .txt, .md"})
+
+@app.route('/descargar/<path:nombre_archivo>')
+def descargar_archivo(nombre_archivo):
+    return send_from_directory(config.CARPETA_PDFS, nombre_archivo, as_attachment=True)
+
+def obtener_ip_local():
+    """Devuelve la IP de la PC en la red local (ej: 192.168.0.25)."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("10.255.255.255", 1))  # no envía datos, solo elige la interfaz
+        return s.getsockname()[0]
+    except Exception:
+        return "127.0.0.1"  # sin red: vuelve a localhost
+    finally:
+        s.close()
+        
+if __name__ == '__main__':
+    host_env = os.environ.get("FLASK_HOST", "0.0.0.0")
+    port_env = int(os.environ.get("FLASK_PORT", 5000))
+    url = f"http://{obtener_ip_local()}:{port_env}"
+    print(f"\n📚 Biblioteca lista en {url}  (cerrá esta ventana para apagarla)\n")
+    threading.Timer(2.0, lambda: webbrowser.open(url)).start()
+    app.run(host=host_env, port=port_env, debug=False)

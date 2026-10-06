@@ -1,0 +1,9 @@
+dist/
+build/
+__pycache__/
+*.pyc
+*.spec
+mis_pdfs/
+*.db
+.env
+*.lock
