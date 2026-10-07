@@ -29,6 +29,10 @@ def inicio():
         <title>Mi Biblioteca Inteligente G3</title>
         <style>
             /* DISEÑO DE CÓDIGO LIMPIO CON SOPORTE AUTOMÁTICO DE MODO OSCURO */
+            .opciones { margin-top: 10px; color: var(--texto-secundario); }
+            #paginador { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 15px; }
+            #paginador button { padding: 8px 16px; }
+            #paginador button:disabled { opacity: 0.4; cursor: default; }
             :root {
                 --bg-principal: #f4f4f9;
                 --bg-seccion: #ffffff;
@@ -86,7 +90,11 @@ def inicio():
                 <input type="text" id="pregunta" placeholder="¿Qué querés buscar en tus libros?">
                 <button onclick="buscar()">Buscar</button>
             </div>
+            <div class="opciones">
+                <label><input type="checkbox" id="agrupar"> Un resultado por libro</label>
+            </div>
             <div id="resultados"></div>
+            <div id="paginador"></div>
         </div>
 
         <script>
@@ -124,30 +132,57 @@ def inicio():
                 }
             }
 
+            const POR_PAGINA = 10;
+            let todos = [];
+
+            function esc(s) {
+                return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+            }
+
             async function buscar() {
                 const query = document.getElementById('pregunta').value;
                 if(!query) return;
+                const agrupar = document.getElementById('agrupar').checked ? 1 : 0;
                 const resDiv = document.getElementById('resultados');
+                document.getElementById('paginador').innerHTML = "";
                 resDiv.innerHTML = "<p style='text-align:center;'>Buscando localmente...</p>";
-                
-                const response = await fetch(`/buscar?q=${encodeURIComponent(query)}`);
-                const datos = await response.json();
-                
-                resDiv.innerHTML = "";
-                if(datos.length === 0) {
+
+                const response = await fetch(`/buscar?q=${encodeURIComponent(query)}&agrupar=${agrupar}`);
+                todos = await response.json();
+                mostrarPagina(1);
+            }
+
+            function mostrarPagina(p) {
+                const resDiv = document.getElementById('resultados');
+                const pag = document.getElementById('paginador');
+
+                if (todos.length === 0) {
                     resDiv.innerHTML = "<p>No encontré resultados.</p>";
+                    pag.innerHTML = "";
                     return;
                 }
-                
-                datos.forEach(res => {
-                    resDiv.innerHTML += `
+
+                const paginas = Math.ceil(todos.length / POR_PAGINA);
+                const ini = (p - 1) * POR_PAGINA;
+                let html = "";
+                todos.slice(ini, ini + POR_PAGINA).forEach(res => {
+                    html += `
                         <div class="card">
-                            <div class="meta">📄 ${res.archivo} (Pág. ${res.pagina})</div>
-                            <div class="snippet">"${res.texto}..."</div>
+                            <div class="meta">📄 ${esc(res.archivo)} (Pág. ${res.pagina})</div>
+                            <div class="snippet">"${esc(res.texto)}..."</div>
                             <a class="btn-download" href="/descargar/${encodeURIComponent(res.archivo)}" target="_blank">📥 Descargar Libro</a>
                         </div>`;
                 });
+                resDiv.innerHTML = html;
+
+                pag.innerHTML = `
+                    <button ${p <= 1 ? "disabled" : ""} onclick="mostrarPagina(${p - 1})">←</button>
+                    <span>Página ${p} de ${paginas} (${todos.length} resultados)</span>
+                    <button ${p >= paginas ? "disabled" : ""} onclick="mostrarPagina(${p + 1})">→</button>`;
+                window.scrollTo({ top: resDiv.offsetTop - 20 });
             }
+
+            document.getElementById('agrupar').addEventListener('change', buscar);
         </script>
     </body>
     </html>
@@ -157,7 +192,13 @@ def inicio():
 def api_buscar():
     query = request.args.get('q', '').strip()
     if not query: return jsonify([])
-    resultados = buscador.buscar(query)
+    agrupar = request.args.get('agrupar') == '1'
+    try:
+        n = int(request.args.get('n', 100))
+    except ValueError:
+        n = 100
+    n = max(1, min(n, 200))
+    resultados = buscador.buscar(query, top_k=n, agrupar=agrupar)
     return jsonify(resultados)
 
 @app.route('/subir', methods=['POST'])

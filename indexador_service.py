@@ -4,13 +4,17 @@ from docx import Document
 import database
 
 def leer_pdf(ruta):
-    """Extrae el texto de un archivo PDF por páginas."""
+    """Extrae el texto de un archivo PDF por páginas, saltando las dañadas."""
     paginas = []
     reader = PdfReader(ruta)
-    for num_pagina, pagina in enumerate(reader.pages, start=1):
-        texto = pagina.extract_text()
+    for i in range(len(reader.pages)):
+        try:
+            texto = reader.pages[i].extract_text()
+        except Exception as e:
+            print(f"⚠️ {os.path.basename(ruta)}: página {i + 1} ilegible ({e})")
+            continue
         if texto:
-            paginas.append((num_pagina, texto))
+            paginas.append((i + 1, texto))
     return paginas
 
 def leer_docx(ruta):

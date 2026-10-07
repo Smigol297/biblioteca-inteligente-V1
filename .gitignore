@@ -7,3 +7,4 @@ mis_pdfs/
 *.db
 .env
 *.lock
+docs/

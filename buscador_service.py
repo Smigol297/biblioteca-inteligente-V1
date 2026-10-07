@@ -33,26 +33,40 @@ class BuscadorLocal:
             print(f"⚠️ Error en traducción: {e}")
         return query
 
-    def buscar(self, query, top_k=3):
-        """Realiza la búsqueda matemática bilingüe."""
+    def buscar(self, query, top_k=100, umbral_abs=0.03, umbral_rel=0.3, agrupar=False):
+        """Búsqueda bilingüe: devuelve solo coincidencias fuertes.
+        agrupar=True deja solo la mejor página de cada libro."""
         if self.matrix_tfidf is None:
             return []
 
         query_expandida = self._traducir_consulta(query)
         print(f"🔍 Buscando: {query_expandida}")
-        
+
         vector_pregunta = self.vectorizer.transform([query_expandida])
         similitudes = cosine_similarity(self.matrix_tfidf, vector_pregunta).flatten()
-        mejores_indices = np.argsort(similitudes)[::-1][:top_k]
-        
+
+        mejor = similitudes.max()
+        if mejor <= 0:
+            return []
+        minimo = max(umbral_abs, mejor * umbral_rel)
+
         resultados = []
-        for idx in mejores_indices:
-            if similitudes[idx] > 0.02:
-                id_db, archivo, pagina, texto = self.paginas_data[idx]
-                resultados.append({
-                    "archivo": archivo,
-                    "pagina": int(pagina),
-                    "texto": texto[:300]
-                })
+        vistos = set()
+        for idx in np.argsort(similitudes)[::-1]:
+            if similitudes[idx] < minimo:
+                break  # están ordenados: los siguientes son todavía peores
+            id_db, archivo, pagina, texto = self.paginas_data[idx]
+            if agrupar:
+                if archivo in vistos:
+                    continue  # ya tenemos la mejor página de este libro
+                vistos.add(archivo)
+            resultados.append({
+                "archivo": archivo,
+                "pagina": int(pagina),
+                "texto": texto[:300],
+                "score": round(float(similitudes[idx]), 3),
+            })
+            if len(resultados) >= top_k:
+                break
         return resultados
 
