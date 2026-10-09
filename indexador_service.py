@@ -79,15 +79,17 @@ def procesar_un_archivo(ruta_completa, nombre_archivo):
         else:
             return False, f"Formato .{extension} no soportado."
             
-        # 2. Guardar las páginas procesadas en la base de datos
-        paginas_guardadas = 0
+        # 2. Limpiar y guardar todas las páginas en una sola transacción
+        a_guardar = []
         for num_pagina, texto in paginas:
             if len(texto.strip()) > 30:
-                texto_limpio = " ".join(texto.strip().split())
-                database.guardar_pagina(nombre_archivo, num_pagina, texto_limpio)
-                paginas_guardadas += 1
-                
-        return True, paginas_guardadas
+                a_guardar.append((num_pagina, " ".join(texto.strip().split())))
+
+        if not a_guardar:
+            return False, "No se pudo extraer texto del archivo (¿PDF escaneado?)."
+
+        database.reemplazar_archivo(nombre_archivo, a_guardar)
+        return True, len(a_guardar)
         
     except Exception as e:
         return False, str(e)

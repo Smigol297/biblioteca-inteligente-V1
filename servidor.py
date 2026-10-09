@@ -68,6 +68,17 @@ def inicio():
             .snippet { font-style: italic; color: var(--texto-secundario); }
             .btn-download { display: inline-block; margin-top: 10px; padding: 6px 12px; background: var(--exito); color: white; text-decoration: none; border-radius: 4px; font-size: 14px; font-weight: bold; }
             #status-upload { margin-top: 10px; font-weight: bold; color: var(--exito); }
+            .acciones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+            .acciones .btn-download { margin-top: 0; }
+            .btn-sec { display: inline-block; padding: 6px 12px; background: var(--primario); color: white; text-decoration: none; border: none; border-radius: 4px; font-size: 14px; font-weight: bold; cursor: pointer; }
+            #visor { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; padding: 20px; z-index: 10; }
+            .visor-caja { background: var(--bg-seccion); border: 1px solid var(--borde); border-radius: 6px; width: 100%; max-width: 760px; max-height: 90vh; display: flex; flex-direction: column; padding: 16px; }
+            .visor-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
+            .visor-head button { padding: 6px 12px; }
+            #visor-texto { overflow-y: auto; line-height: 1.6; padding: 4px 2px; flex: 1; }
+            .visor-nav { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 12px; }
+            .visor-nav button { padding: 8px 16px; }
+            .visor-nav button:disabled { opacity: 0.4; cursor: default; }
         </style>
     </head>
     <body>
@@ -96,7 +107,23 @@ def inicio():
             <div id="resultados"></div>
             <div id="paginador"></div>
         </div>
-
+        <div id="visor" onclick="if (event.target === this) cerrarVisor()">
+            <div class="visor-caja">
+                <div class="visor-head">
+                    <strong id="visor-titulo"></strong>
+                    <button onclick="cerrarVisor()">✕</button>
+                </div>
+                <div id="visor-texto"></div>
+                <div class="visor-nav">
+                    <button id="visor-ant">← Anterior</button>
+                    <span id="visor-pos"></span>
+                    <button id="visor-sig">Siguiente →</button>
+                </div>
+                <div class="acciones">
+                    <a id="visor-pdf" class="btn-sec" target="_blank" style="display:none;">🔗 Abrir PDF en esta página</a>
+                </div>
+            </div>
+        </div>
         <script>
             async function subirPDF() {
                 const fileInput = document.getElementById('archivo-pdf');
@@ -165,12 +192,17 @@ def inicio():
                 const paginas = Math.ceil(todos.length / POR_PAGINA);
                 const ini = (p - 1) * POR_PAGINA;
                 let html = "";
-                todos.slice(ini, ini + POR_PAGINA).forEach(res => {
+                todos.slice(ini, ini + POR_PAGINA).forEach((res, i) => {
+                    const esPDF = res.archivo.toLowerCase().endsWith('.pdf');
                     html += `
                         <div class="card">
                             <div class="meta">📄 ${esc(res.archivo)} (Pág. ${res.pagina})</div>
                             <div class="snippet">"${esc(res.texto)}..."</div>
-                            <a class="btn-download" href="/descargar/${encodeURIComponent(res.archivo)}" target="_blank">📥 Descargar Libro</a>
+                            <div class="acciones">
+                                <button class="btn-sec" onclick="verPagina(${ini + i})">📖 Ver página completa</button>
+                                ${esPDF ? `<a class="btn-sec" href="/ver/${encodeURIComponent(res.archivo)}#page=${res.pagina}" target="_blank">🔗 Abrir PDF en pág. ${res.pagina}</a>` : ""}
+                                <a class="btn-download" href="/descargar/${encodeURIComponent(res.archivo)}" target="_blank">📥 Descargar Libro</a>
+                            </div>
                         </div>`;
                 });
                 resDiv.innerHTML = html;
@@ -183,6 +215,60 @@ def inicio():
             }
 
             document.getElementById('agrupar').addEventListener('change', buscar);
+            let visorActual = null;
+
+            function verPagina(idx) {
+                const r = todos[idx];
+                cargarPagina(r.archivo, r.pagina);
+            }
+
+            async function cargarPagina(archivo, n) {
+                const visor = document.getElementById('visor');
+                const texto = document.getElementById('visor-texto');
+                visor.style.display = 'flex';
+                texto.innerText = 'Cargando...';
+                try {
+                    const resp = await fetch(`/pagina?archivo=${encodeURIComponent(archivo)}&n=${n}`);
+                    const d = await resp.json();
+                    if (!resp.ok) { texto.innerText = d.error || 'Error'; return; }
+                    visorActual = d;
+
+                    const esPDF = d.archivo.toLowerCase().endsWith('.pdf');
+                    const unidad = esPDF ? 'Pág.' : 'Bloque';
+                    document.getElementById('visor-titulo').innerText = d.archivo;
+                    texto.innerText = d.texto;   // innerText: no interpreta HTML
+                    texto.scrollTop = 0;
+                    document.getElementById('visor-pos').innerText = `${unidad} ${d.pagina} de ${d.ultima}`;
+
+                    const ant = document.getElementById('visor-ant');
+                    const sig = document.getElementById('visor-sig');
+                    ant.disabled = d.anterior === null;
+                    sig.disabled = d.siguiente === null;
+                    ant.onclick = () => cargarPagina(d.archivo, d.anterior);
+                    sig.onclick = () => cargarPagina(d.archivo, d.siguiente);
+
+                    const lnk = document.getElementById('visor-pdf');
+                    if (esPDF) {
+                        lnk.href = `/ver/${encodeURIComponent(d.archivo)}#page=${d.pagina}`;
+                        lnk.style.display = 'inline-block';
+                    } else {
+                        lnk.style.display = 'none';
+                    }
+                } catch (err) {
+                    texto.innerText = 'Error de conexión con el servidor.';
+                }
+            }
+
+            function cerrarVisor() {
+                document.getElementById('visor').style.display = 'none';
+            }
+
+            document.addEventListener('keydown', e => {
+                if (document.getElementById('visor').style.display !== 'flex' || !visorActual) return;
+                if (e.key === 'Escape') cerrarVisor();
+                else if (e.key === 'ArrowLeft' && visorActual.anterior !== null) cargarPagina(visorActual.archivo, visorActual.anterior);
+                else if (e.key === 'ArrowRight' && visorActual.siguiente !== null) cargarPagina(visorActual.archivo, visorActual.siguiente);
+            });
         </script>
     </body>
     </html>
@@ -234,6 +320,23 @@ def api_subir():
 @app.route('/descargar/<path:nombre_archivo>')
 def descargar_archivo(nombre_archivo):
     return send_from_directory(config.CARPETA_PDFS, nombre_archivo, as_attachment=True)
+
+@app.route('/ver/<path:nombre_archivo>')
+def ver_archivo(nombre_archivo):
+    # Sin as_attachment: el navegador lo muestra en pestaña (PDF) en vez de descargarlo
+    return send_from_directory(config.CARPETA_PDFS, nombre_archivo, as_attachment=False)
+
+@app.route('/pagina')
+def api_pagina():
+    archivo = request.args.get('archivo', '')
+    try:
+        n = int(request.args.get('n', 1))
+    except ValueError:
+        return jsonify({"error": "Página inválida"}), 400
+    datos = database.obtener_pagina(archivo, n)
+    if datos is None:
+        return jsonify({"error": "Página no encontrada"}), 404
+    return jsonify(datos)
 
 def obtener_ip_local():
     """Devuelve la IP de la PC en la red local (ej: 192.168.0.25)."""
