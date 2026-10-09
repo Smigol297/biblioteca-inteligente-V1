@@ -9,3 +9,4 @@
 6. Paginacion para obtener hasta 100 ocurrencias dentro de un umbral, ordenadas por mayor puntaje
 7. Un check en la seccion del buscador, determina si se debe mostrar un solo libro por ocurrencia o no.
 8. Abrir el PDF en la página encontrada y Ver pagina completa
+9. Fragmento centrado en la coincidencia y términos resaltados.

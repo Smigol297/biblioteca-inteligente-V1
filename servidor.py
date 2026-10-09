@@ -66,6 +66,7 @@ def inicio():
             .card { background: var(--bg-principal); padding: 15px; margin-top: 15px; border-radius: 4px; border-left: 4px solid var(--primario); border: 1px solid var(--borde); border-left: 4px solid var(--primario); }
             .meta { font-weight: bold; color: var(--texto-secundario); margin-bottom: 5px; }
             .snippet { font-style: italic; color: var(--texto-secundario); }
+            .snippet mark { background: #f1c40f; color: #000; padding: 0 2px; border-radius: 2px; font-style: normal; font-weight: bold; }
             .btn-download { display: inline-block; margin-top: 10px; padding: 6px 12px; background: var(--exito); color: white; text-decoration: none; border-radius: 4px; font-size: 14px; font-weight: bold; }
             #status-upload { margin-top: 10px; font-weight: bold; color: var(--exito); }
             .acciones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
@@ -165,6 +166,10 @@ def inicio():
             function esc(s) {
                 return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
             }
+            
+            function resaltar(trozos) {
+                return trozos.map(t => t[1] ? `<mark>${esc(t[0])}</mark>` : esc(t[0])).join("");
+            }
 
             async function buscar() {
                 const query = document.getElementById('pregunta').value;
@@ -197,7 +202,7 @@ def inicio():
                     html += `
                         <div class="card">
                             <div class="meta">📄 ${esc(res.archivo)} (Pág. ${res.pagina})</div>
-                            <div class="snippet">"${esc(res.texto)}..."</div>
+                            <div class="snippet">${resaltar(res.fragmento)}</div>
                             <div class="acciones">
                                 <button class="btn-sec" onclick="verPagina(${ini + i})">📖 Ver página completa</button>
                                 ${esPDF ? `<a class="btn-sec" href="/ver/${encodeURIComponent(res.archivo)}#page=${res.pagina}" target="_blank">🔗 Abrir PDF en pág. ${res.pagina}</a>` : ""}
