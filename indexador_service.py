@@ -11,7 +11,7 @@ def leer_pdf(ruta):
         try:
             texto = reader.pages[i].extract_text()
         except Exception as e:
-            print(f"⚠️ {os.path.basename(ruta)}: página {i + 1} ilegible ({e})")
+            print(f" {os.path.basename(ruta)}: página {i + 1} ilegible ({e})")
             continue
         if texto:
             paginas.append((i + 1, texto))
