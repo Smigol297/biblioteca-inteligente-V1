@@ -4,7 +4,7 @@ import database
 import indexador_service
 
 def ejecutar_indexacion():
-    print("📚 Inicializando Base de Datos Local...")
+    print(" Inicializando Base de Datos Local...")
     database.inicializar_db()
     
     archivos_ya_listos = database.obtener_archivos_indexados()
@@ -19,9 +19,9 @@ def ejecutar_indexacion():
             
             exito, resultado = indexador_service.procesar_un_archivo(ruta_completa, archivo)
             if exito:
-                print(f"✅ Guardado en disco ({resultado} páginas).")
+                print(f" Guardado en disco ({resultado} páginas).")
             else:
-                print(f"❌ Error al procesar: {resultado}")
+                print(f" Error al procesar: {resultado}")
                 
     if not hubo_cambios:
         print("No se encontraron archivos PDFs nuevos para procesar.")
