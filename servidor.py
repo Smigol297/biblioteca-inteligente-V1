@@ -15,7 +15,7 @@ database.inicializar_db()
 
 # Inicializar y entrenar el buscador al levantar el servidor
 buscador = BuscadorLocal()
-print("🧠 Entrenando motor de búsqueda local...")
+print("Entrenando motor de búsqueda local...")
 buscador.entrenar_modelo()
 
 @app.route('/')
@@ -358,6 +358,6 @@ if __name__ == '__main__':
     host_env = os.environ.get("FLASK_HOST", "0.0.0.0")
     port_env = int(os.environ.get("FLASK_PORT", 5000))
     url = f"http://{obtener_ip_local()}:{port_env}"
-    print(f"\n📚 Biblioteca lista en {url}  (cerrá esta ventana para apagarla)\n")
+    print(f"\n Biblioteca lista en {url}  (cerrá esta ventana para apagarla)\n")
     threading.Timer(2.0, lambda: webbrowser.open(url)).start()
     app.run(host=host_env, port=port_env, debug=False)
