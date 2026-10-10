@@ -90,7 +90,7 @@ class BuscadorLocal:
             if traduccion and traduccion.lower() != query.lower():
                 return f"{query} {traduccion}"
         except Exception as e:
-            print(f"⚠️ Error en traducción: {e}")
+            print(f"Error en traducción: {e}")
         return query
 
     def _terminos_resaltables(self, query_expandida):
@@ -109,7 +109,7 @@ class BuscadorLocal:
             return []
 
         query_expandida = self._traducir_consulta(query)
-        print(f"🔍 Buscando: {query_expandida}")
+        print(f" Buscando: {query_expandida}")
 
         vector_pregunta = self.vectorizer.transform([query_expandida])
         similitudes = cosine_similarity(self.matrix_tfidf, vector_pregunta).flatten()
