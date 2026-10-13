@@ -96,7 +96,7 @@ def inicio():
         </style>
     </head>
     <body>
-        <h1>📚 Biblioteca Inteligente Hogareña</h1>        
+        <h1>📚 Biblioteca Inteligente Hogareña</h1>
         <!-- PANEL DE INDEXACIÓN (SUBIR ARCHIVOS) -->
         <div class="section">
             <h3>📥 Agregar libros</h3>
