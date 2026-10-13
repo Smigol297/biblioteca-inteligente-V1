@@ -8,3 +8,4 @@ mis_pdfs/
 .env
 *.lock
 docs/
+*.png

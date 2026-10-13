@@ -1,9 +1,16 @@
 UID := $(shell id -u)
 GID := $(shell id -g)
 
-.PHONY: all linux32 windows clean
+.PHONY: all linux32 windows clean test lint format
 
 all: linux32 windows
+
+test:
+	pytest
+lint:
+   	black --check . && isort --check-only . && flake8
+format:
+   	black . && isort .
 
 linux32:
 	docker build --platform linux/386 -t biblioteca-linux32 -f docker/Dockerfile.linux32 .

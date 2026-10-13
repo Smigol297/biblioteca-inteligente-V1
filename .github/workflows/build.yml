@@ -45,6 +45,7 @@ jobs:
           python -m PyInstaller --onedir --noconfirm --noupx --name biblioteca \
             --collect-submodules sklearn --collect-submodules scipy --collect-data docx \
             --exclude-module matplotlib --exclude-module tkinter \
+            --collect-submodules segno \
             servidor.py
 
       - name: Prueba de humo (arrancar, subir un texto y buscarlo)
@@ -62,6 +63,9 @@ jobs:
           echo "Texto de prueba sobre aprendizaje automatico y redes neuronales en bibliotecas digitales" > prueba.txt
           curl -sf -F "file=@prueba.txt" http://127.0.0.1:5000/subir | grep -E '"exito": ?true' || { cat salida.log; exit 1; }
           curl -sf "http://127.0.0.1:5000/buscar?q=aprendizaje" | grep -q "prueba.txt" || { cat salida.log; exit 1; }
+          curl -sf -F "file=@prueba.txt" -F "coleccion=pruebas" http://127.0.0.1:5000/subir | grep -E '"exito": ?true' || { cat salida.log; exit 1; }
+          curl -sf "http://127.0.0.1:5000/buscar?q=aprendizaje&coleccion=pruebas" | grep -q "pruebas/prueba.txt" || { cat salida.log; exit 1; }
+          curl -sf http://127.0.0.1:5000/qr.svg | grep -q "<svg" || { cat salida.log; exit 1; }
           echo "Prueba de humo OK"
           kill $PID 2>/dev/null || true
           if [ "$RUNNER_OS" = "Windows" ]; then taskkill //F //IM biblioteca.exe || true; fi

@@ -15,6 +15,7 @@ DB_PATH = os.path.join(BASE_DIR, "biblioteca.db")
 if not os.path.exists(CARPETA_PDFS):
     os.makedirs(CARPETA_PDFS)
 
+
 def cargar_env():
     """Carga variables de entorno manualmente desde un archivo .env si existe."""
     env_path = os.path.join(BASE_DIR, ".env")
@@ -25,6 +26,6 @@ def cargar_env():
                     clave, valor = linea.strip().split("=", 1)
                     os.environ[clave] = valor
 
+
 # Cargar el entorno por si se requiere en el futuro
 cargar_env()
-

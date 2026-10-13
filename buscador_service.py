@@ -1,10 +1,18 @@
+import re
+from bisect import bisect_left
+
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from translate import Translator
+
 import database
-import re
-from bisect import bisect_left
+
+
+def _coleccion_de(archivo):
+    """La colección es la carpeta: 'recetas/torta.pdf' -> 'recetas'. Sin carpeta -> ''."""
+    return archivo.split("/")[0] if "/" in archivo else ""
+
 
 def _fragmento(texto, terminos, ancho=300):
     """Devuelve [[trozo, resaltado], ...]: la ventana de ~ancho caracteres con más términos distintos."""
@@ -69,16 +77,18 @@ class BuscadorLocal:
         self.vectorizer = TfidfVectorizer(lowercase=True)
         self.matrix_tfidf = None
         self.paginas_data = []
+        self.colecciones = None
 
     def entrenar_modelo(self):
         """Carga los datos desde el disco y entrena el motor matemático local."""
         filas = database.obtener_todas_las_paginas()
         if not filas:
             return False
-            
+
         self.paginas_data = filas
+        self.colecciones = np.array([_coleccion_de(r[1]) for r in filas])
         textos = [r[3] for r in filas]
-        
+
         self.matrix_tfidf = self.vectorizer.fit_transform(textos)
         return True
 
@@ -102,7 +112,9 @@ class BuscadorLocal:
         raros = set(t for t in terminos if t in vocab and idf[vocab[t]] > 1.7)
         return raros or set(t for t in terminos if t in vocab)
 
-    def buscar(self, query, top_k=100, umbral_abs=0.03, umbral_rel=0.3, agrupar=False):
+    def buscar(
+        self, query, top_k=100, umbral_abs=0.03, umbral_rel=0.3, agrupar=False, coleccion=None
+    ):
         """Búsqueda bilingüe: devuelve solo coincidencias fuertes.
         agrupar=True deja solo la mejor página de cada libro."""
         if self.matrix_tfidf is None:
@@ -113,7 +125,8 @@ class BuscadorLocal:
 
         vector_pregunta = self.vectorizer.transform([query_expandida])
         similitudes = cosine_similarity(self.matrix_tfidf, vector_pregunta).flatten()
-
+        if coleccion is not None:  # None = todas; '' = solo los que no tienen colección
+            similitudes = np.where(self.colecciones == coleccion, similitudes, 0.0)
         mejor = similitudes.max()
         if mejor <= 0:
             return []
@@ -131,14 +144,15 @@ class BuscadorLocal:
                     continue  # ya tenemos la mejor página de este libro
                 vistos.add(archivo)
             fragmento = _fragmento(texto, terminos)
-            resultados.append({
-                "archivo": archivo,
-                "pagina": int(pagina),
-                "texto": "".join(t for t, _ in fragmento),
-                "fragmento": fragmento,
-                "score": round(float(similitudes[idx]), 3),
-            })
+            resultados.append(
+                {
+                    "archivo": archivo,
+                    "pagina": int(pagina),
+                    "texto": "".join(t for t, _ in fragmento),
+                    "fragmento": fragmento,
+                    "score": round(float(similitudes[idx]), 3),
+                }
+            )
             if len(resultados) >= top_k:
                 break
         return resultados
-

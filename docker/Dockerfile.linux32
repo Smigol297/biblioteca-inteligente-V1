@@ -17,6 +17,7 @@ COPY config.py database.py indexador_service.py buscador_service.py servidor.py 
 RUN /venv/bin/pyinstaller --onefile --name biblioteca \
         --collect-submodules sklearn --collect-submodules pypdf --hidden-import typing_extensions --collect-data docx \
         --exclude-module matplotlib --exclude-module tkinter \
+        --collect-submodules segno \
         servidor.py
 
 CMD cp /app/dist/biblioteca /out/biblioteca && chown $HOST_UID:$HOST_GID /out/biblioteca

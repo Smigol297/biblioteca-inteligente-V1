@@ -1,13 +1,20 @@
+import io
 import os
 import socket
 import threading
 import webbrowser
-from flask import Flask, request, jsonify, send_from_directory
+
+from flask import Flask, Response, jsonify, request, send_from_directory
+
 import config
 import database
-from indexador_service import procesar_un_archivo
 from buscador_service import BuscadorLocal
+from indexador_service import procesar_un_archivo
 
+try:
+    import segno  # QR en Python puro; si no está instalada, la página funciona sin QR
+except ImportError:
+    segno = None
 app = Flask(__name__)
 
 # Inicializar Base de datos al arrancar
@@ -18,9 +25,10 @@ buscador = BuscadorLocal()
 print("Entrenando motor de busqueda local...")
 buscador.entrenar_modelo()
 
-@app.route('/')
+
+@app.route("/")
 def inicio():
-    return '''
+    return """
     <!DOCTYPE html>
     <html lang="es">
     <head>
@@ -80,17 +88,25 @@ def inicio():
             .visor-nav { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 12px; }
             .visor-nav button { padding: 8px 16px; }
             .visor-nav button:disabled { opacity: 0.4; cursor: default; }
+            select { padding: 8px; border: 1px solid var(--borde); border-radius: 4px; font-size: 15px; background: var(--bg-principal); color: var(--texto); }
+            #filtro-coleccion { margin-left: 12px; }
+            .qr-box { display: flex; gap: 16px; align-items: center; margin-bottom: 12px; }
+            #qr { background: #ffffff; border-radius: 4px; }
+            .btn-peligro { background: #C0392B; }
         </style>
     </head>
     <body>
-        <h1>📚 Biblioteca Inteligente Hogareña</h1>
-        
+        <h1>📚 Biblioteca Inteligente Hogareña</h1>        
         <!-- PANEL DE INDEXACIÓN (SUBIR ARCHIVOS) -->
         <div class="section">
-            <h3>📥 Agregar nuevo libro (PDF)</h3>
+            <h3>📥 Agregar libros</h3>
             <div class="upload-box">
-                <input type="file" id="archivo-pdf" accept=".pdf,.docx,.txt,.md">
-                <button onclick="subirPDF()">Subir e Indexar</button>
+                <input type="file" id="archivo-pdf" accept=".pdf,.docx,.txt,.md" multiple>
+                <button id="btn-subir" onclick="subirPDF()">Subir e Indexar</button>
+            </div>
+            <div class="upload-box">
+                <input type="text" id="coleccion" list="lista-colecciones" placeholder="Colección (opcional): programación, recetas...">
+                <datalist id="lista-colecciones"></datalist>
             </div>
             <div id="status-upload"></div>
         </div>
@@ -104,9 +120,22 @@ def inicio():
             </div>
             <div class="opciones">
                 <label><input type="checkbox" id="agrupar"> Un resultado por libro</label>
+                <select id="filtro-coleccion" style="display:none;"></select>
             </div>
             <div id="resultados"></div>
             <div id="paginador"></div>
+        </div>
+        <!-- ACCESO DESDE EL CELULAR Y APAGADO -->
+        <div class="section" id="panel-red" style="display:none;">
+            <div id="bloque-qr" class="qr-box" style="display:none;">
+                <img id="qr" width="150" height="150" alt="QR de la biblioteca">
+                <div>
+                    <strong>📱 Abrir desde el celular</strong>
+                    <p>Conectalo al mismo Wi-Fi y escaneá el código, o escribí:</p>
+                    <p id="url-red" style="font-weight: bold;"></p>
+                </div>
+            </div>
+            <button id="btn-apagar" class="btn-peligro" style="display:none;" onclick="apagar()">⏻ Apagar servidor</button>
         </div>
         <div id="visor" onclick="if (event.target === this) cerrarVisor()">
             <div class="visor-caja">
@@ -129,35 +158,44 @@ def inicio():
             async function subirPDF() {
                 const fileInput = document.getElementById('archivo-pdf');
                 const statusDiv = document.getElementById('status-upload');
-                
-                if (fileInput.files.length === 0) {
-                    alert("Por favor, seleccioná un archivo PDF primero.");
+                const boton = document.getElementById('btn-subir');
+                const coleccion = document.getElementById('coleccion').value.trim();
+                const archivos = Array.from(fileInput.files);
+
+                if (archivos.length === 0) {
+                    alert("Por favor, seleccioná al menos un archivo primero.");
                     return;
                 }
-                
-                const formData = new FormData();
-                // SOLUCIÓN AL ERROR: Especificamos explícitamente el archivo [0]
-                formData.append("file", fileInput.files[0]);
-                
+
+                boton.disabled = true;
                 statusDiv.style.color = "#E67E22";
-                statusDiv.innerText = "Enviando e indexando en la netbook... (puede demorar unos segundos)";
-                
-                try {
-                    const response = await fetch('/subir', { method: 'POST', body: formData });
-                    const resultado = await response.json();
-                    
-                    if (resultado.exito) {
-                        statusDiv.style.color = "#2ECC71";
-                        statusDiv.innerText = `✅ ${resultado.mensaje}`;
-                        fileInput.value = ""; 
-                    } else {
-                        statusDiv.style.color = "#E74C3C";
-                        statusDiv.innerText = `❌ Error: ${resultado.mensaje}`;
+                const lineas = [];
+                let bien = 0;
+                for (let i = 0; i < archivos.length; i++) {
+                    const f = archivos[i];
+                    statusDiv.innerText = `Indexando ${i + 1} de ${archivos.length}: ${f.name} (puede demorar)...`;
+                    const formData = new FormData();
+                    formData.append("file", f);
+                    formData.append("coleccion", coleccion);
+                    formData.append("entrenar", "0");   // se reentrena una sola vez al final
+                    try {
+                        const response = await fetch('/subir', { method: 'POST', body: formData });
+                        const r = await response.json();
+                        if (r.exito) bien++;
+                        lineas.push(r.exito ? "✅ " + r.mensaje : "❌ " + f.name + ": " + r.mensaje);
+                    } catch (err) {
+                        lineas.push("❌ " + f.name + ": error de conexión con el servidor.");
                     }
-                } catch (err) {
-                    statusDiv.style.color = "#E74C3C";
-                    statusDiv.innerText = "❌ Error de conexión con el servidor.";
                 }
+                if (bien > 0) {
+                    statusDiv.innerText = "Actualizando el buscador...";
+                    try { await fetch('/reentrenar', { method: 'POST' }); } catch (err) {}
+                }
+                statusDiv.style.color = bien === archivos.length ? "#2ECC71" : (bien === 0 ? "#E74C3C" : "#E67E22");
+                statusDiv.innerHTML = lineas.map(esc).join("<br>");
+                fileInput.value = "";
+                boton.disabled = false;
+                cargarColecciones();
             }
 
             const POR_PAGINA = 10;
@@ -166,7 +204,6 @@ def inicio():
             function esc(s) {
                 return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
             }
-            
             function resaltar(trozos) {
                 return trozos.map(t => t[1] ? `<mark>${esc(t[0])}</mark>` : esc(t[0])).join("");
             }
@@ -179,7 +216,10 @@ def inicio():
                 document.getElementById('paginador').innerHTML = "";
                 resDiv.innerHTML = "<p style='text-align:center;'>Buscando localmente...</p>";
 
-                const response = await fetch(`/buscar?q=${encodeURIComponent(query)}&agrupar=${agrupar}`);
+                const sel = document.getElementById('filtro-coleccion');
+                let url = `/buscar?q=${encodeURIComponent(query)}&agrupar=${agrupar}`;
+                if (sel.selectedIndex > 0) url += `&coleccion=${encodeURIComponent(sel.value)}`;
+                const response = await fetch(url);
                 todos = await response.json();
                 mostrarPagina(1);
             }
@@ -205,8 +245,8 @@ def inicio():
                             <div class="snippet">${resaltar(res.fragmento)}</div>
                             <div class="acciones">
                                 <button class="btn-sec" onclick="verPagina(${ini + i})">📖 Ver página completa</button>
-                                ${esPDF ? `<a class="btn-sec" href="/ver/${encodeURIComponent(res.archivo)}#page=${res.pagina}" target="_blank">🔗 Abrir PDF en pág. ${res.pagina}</a>` : ""}
-                                <a class="btn-download" href="/descargar/${encodeURIComponent(res.archivo)}" target="_blank">📥 Descargar Libro</a>
+                                ${esPDF ? `<a class="btn-sec" href="/ver/${rutaArchivo(res.archivo)}#page=${res.pagina}" target="_blank">🔗 Abrir PDF en pág. ${res.pagina}</a>` : ""}
+                                <a class="btn-download" href="/descargar/${rutaArchivo(res.archivo)}" target="_blank">📥 Descargar Libro</a>
                             </div>
                         </div>`;
                 });
@@ -220,6 +260,10 @@ def inicio():
             }
 
             document.getElementById('agrupar').addEventListener('change', buscar);
+            document.getElementById('filtro-coleccion').addEventListener('change', buscar);
+            document.getElementById('pregunta').addEventListener('keydown', e => {
+                if (e.key === 'Enter' && !e.isComposing) buscar();
+            });
             let visorActual = null;
 
             function verPagina(idx) {
@@ -254,7 +298,7 @@ def inicio():
 
                     const lnk = document.getElementById('visor-pdf');
                     if (esPDF) {
-                        lnk.href = `/ver/${encodeURIComponent(d.archivo)}#page=${d.pagina}`;
+                        lnk.href = `/ver/${rutaArchivo(d.archivo)}#page=${d.pagina}`;
                         lnk.style.display = 'inline-block';
                     } else {
                         lnk.style.display = 'none';
@@ -274,74 +318,163 @@ def inicio():
                 else if (e.key === 'ArrowLeft' && visorActual.anterior !== null) cargarPagina(visorActual.archivo, visorActual.anterior);
                 else if (e.key === 'ArrowRight' && visorActual.siguiente !== null) cargarPagina(visorActual.archivo, visorActual.siguiente);
             });
+
+            // Arma la parte de la URL conservando las barras de las carpetas
+            function rutaArchivo(a) {
+                return a.split("/").map(encodeURIComponent).join("/");
+            }
+
+            async function cargarColecciones() {
+                try {
+                    const d = await (await fetch('/colecciones')).json();
+                    const sel = document.getElementById('filtro-coleccion');
+                    const habia = sel.options.length > 0;
+                    const previo = sel.value;
+                    let html = '<option value="*">Todas las colecciones</option>';
+                    d.colecciones.forEach(c => { html += `<option value="${esc(c)}">${esc(c)}</option>`; });
+                    if (d.hay_sin && d.colecciones.length) html += '<option value="">(sin colección)</option>';
+                    sel.innerHTML = html;
+                    if (habia) {
+                        sel.value = previo;
+                        if (sel.selectedIndex < 0) sel.selectedIndex = 0;
+                    }
+                    sel.style.display = d.colecciones.length ? 'inline-block' : 'none';
+                    document.getElementById('lista-colecciones').innerHTML =
+                        d.colecciones.map(c => `<option value="${esc(c)}">`).join("");
+                } catch (err) {}
+            }
+
+            async function cargarInfo() {
+                try {
+                    const info = await (await fetch('/info')).json();
+                    const panel = document.getElementById('panel-red');
+                    if (info.hay_red && info.hay_qr) {
+                        document.getElementById('qr').src = '/qr.svg';
+                        document.getElementById('url-red').innerText = info.url;
+                        document.getElementById('bloque-qr').style.display = 'flex';
+                        panel.style.display = 'block';
+                    }
+                    if (info.es_local) {
+                        document.getElementById('btn-apagar').style.display = 'inline-block';
+                        panel.style.display = 'block';
+                    }
+                } catch (err) {}
+            }
+
+            async function apagar() {
+                if (!confirm("¿Apagar la biblioteca? Para volver a usarla tendrás que abrir el programa de nuevo.")) return;
+                try {
+                    await fetch('/apagar', { method: 'POST', headers: { 'X-Biblioteca': '1' } });
+                } catch (err) {}
+                document.body.innerHTML = "<h2 style='text-align:center; margin-top:80px;'>Servidor apagado. Ya podés cerrar esta pestaña.</h2>";
+            }
+
+            cargarColecciones();
+            cargarInfo();
         </script>
     </body>
     </html>
-    '''
+    """
 
-@app.route('/buscar')
+
+@app.route("/buscar")
 def api_buscar():
-    query = request.args.get('q', '').strip()
-    if not query: return jsonify([])
-    agrupar = request.args.get('agrupar') == '1'
+    query = request.args.get("q", "").strip()
+    if not query:
+        return jsonify([])
+    agrupar = request.args.get("agrupar") == "1"
     try:
-        n = int(request.args.get('n', 100))
+        n = int(request.args.get("n", 100))
     except ValueError:
         n = 100
     n = max(1, min(n, 200))
-    resultados = buscador.buscar(query, top_k=n, agrupar=agrupar)
+    coleccion = request.args.get("coleccion")  # None = todas; '' = sin colección
+    resultados = buscador.buscar(query, top_k=n, agrupar=agrupar, coleccion=coleccion)
     return jsonify(resultados)
 
-@app.route('/subir', methods=['POST'])
-def api_subir():
-    if 'file' not in request.files:
-        return jsonify({"exito": False, "mensaje": "No se envió ningún archivo"})
-        
-    archivo = request.files['file']
-    if archivo.filename == '':
-        return jsonify({"exito": False, "mensaje": "Nombre de archivo vacío"})
-        
-    # Agregamos las nuevas extensiones permitidas
-    extensiones_validas = ('.pdf', '.docx', '.txt', '.md')
-    nombre_archivo = archivo.filename
-    
-    if archivo and nombre_archivo.lower().endswith(extensiones_validas):
-        ruta_destino = os.path.join(config.CARPETA_PDFS, nombre_archivo)
-        
-        # Guardar físicamente en el disco rígido de la netbook
-        archivo.save(ruta_destino)
-        
-        # Llamamos al servicio actualizado (que ahora procesa cualquier formato)
-        exito, resultado = procesar_un_archivo(ruta_destino, nombre_archivo)
-        
-        if exito:
-            buscador.entrenar_modelo() # Re-entrenar el buscador con los nuevos textos
-            return jsonify({"exito": True, "mensaje": f"¡{nombre_archivo} indexado! ({resultado} bloques añadidos)"})
-        else:
-            return jsonify({"exito": False, "mensaje": f"Guardado pero falló la lectura: {resultado}"})
-            
-    return jsonify({"exito": False, "mensaje": "Formato no permitido. Solo se aceptan: .pdf, .docx, .txt, .md"})
 
-@app.route('/descargar/<path:nombre_archivo>')
+def _limpiar_nombre(nombre):
+    """Deja solo el último tramo de una ruta (evita '../' y carpetas anidadas)."""
+    nombre = (nombre or "").replace("\\", "/").split("/")[-1].strip()
+    return "" if nombre in (".", "..") else nombre
+
+
+@app.route("/subir", methods=["POST"])
+def api_subir():
+    if "file" not in request.files:
+        return jsonify({"exito": False, "mensaje": "No se envió ningún archivo"})
+
+    archivo = request.files["file"]
+    nombre = _limpiar_nombre(archivo.filename)
+    if nombre == "":
+        return jsonify({"exito": False, "mensaje": "Nombre de archivo vacío"})
+    if not nombre.lower().endswith((".pdf", ".docx", ".txt", ".md")):
+        return jsonify(
+            {
+                "exito": False,
+                "mensaje": "Formato no permitido. Solo se aceptan: .pdf, .docx, .txt, .md",
+            }
+        )
+
+    # La colección es una carpeta dentro de mis_pdfs; el "nombre" del libro pasa a ser 'coleccion/archivo'
+    coleccion = _limpiar_nombre(request.form.get("coleccion", ""))
+    clave = coleccion + "/" + nombre if coleccion else nombre
+    carpeta = os.path.join(config.CARPETA_PDFS, coleccion) if coleccion else config.CARPETA_PDFS
+    os.makedirs(carpeta, exist_ok=True)
+    ruta_destino = os.path.join(carpeta, nombre)
+    archivo.save(ruta_destino)
+
+    exito, resultado = procesar_un_archivo(ruta_destino, clave)
+    if exito:
+        if request.form.get("entrenar", "1") != "0":
+            buscador.entrenar_modelo()  # con entrenar=0 el cliente reentrena una vez al final
+        return jsonify(
+            {"exito": True, "mensaje": f"¡{clave} indexado! ({resultado} bloques añadidos)"}
+        )
+    return jsonify({"exito": False, "mensaje": f"Guardado pero falló la lectura: {resultado}"})
+
+
+@app.route("/reentrenar", methods=["POST"])
+def api_reentrenar():
+    buscador.entrenar_modelo()
+    return jsonify({"exito": True})
+
+
+@app.route("/colecciones")
+def api_colecciones():
+    nombres = set()
+    hay_sin = False
+    for a in database.obtener_archivos_indexados():
+        if "/" in a:
+            nombres.add(a.split("/")[0])
+        else:
+            hay_sin = True
+    return jsonify({"colecciones": sorted(nombres, key=str.lower), "hay_sin": hay_sin})
+
+
+@app.route("/descargar/<path:nombre_archivo>")
 def descargar_archivo(nombre_archivo):
     return send_from_directory(config.CARPETA_PDFS, nombre_archivo, as_attachment=True)
 
-@app.route('/ver/<path:nombre_archivo>')
+
+@app.route("/ver/<path:nombre_archivo>")
 def ver_archivo(nombre_archivo):
     # Sin as_attachment: el navegador lo muestra en pestaña (PDF) en vez de descargarlo
     return send_from_directory(config.CARPETA_PDFS, nombre_archivo, as_attachment=False)
 
-@app.route('/pagina')
+
+@app.route("/pagina")
 def api_pagina():
-    archivo = request.args.get('archivo', '')
+    archivo = request.args.get("archivo", "")
     try:
-        n = int(request.args.get('n', 1))
+        n = int(request.args.get("n", 1))
     except ValueError:
         return jsonify({"error": "Página inválida"}), 400
     datos = database.obtener_pagina(archivo, n)
     if datos is None:
         return jsonify({"error": "Página no encontrada"}), 404
     return jsonify(datos)
+
 
 def obtener_ip_local():
     """Devuelve la IP de la PC en la red local (ej: 192.168.0.25)."""
@@ -353,8 +486,57 @@ def obtener_ip_local():
         return "127.0.0.1"  # sin red: vuelve a localhost
     finally:
         s.close()
-        
-if __name__ == '__main__':
+
+
+def _es_local():
+    """True si la petición viene de la misma PC (no de otro dispositivo de la red)."""
+    return request.remote_addr in ("127.0.0.1", "::1", obtener_ip_local())
+
+
+def _url_red():
+    puerto = request.environ.get("SERVER_PORT", "5000")
+    return f"http://{obtener_ip_local()}:{puerto}"
+
+
+@app.route("/info")
+def api_info():
+    return jsonify(
+        {
+            "url": _url_red(),
+            "hay_red": obtener_ip_local() != "127.0.0.1",
+            "hay_qr": segno is not None,
+            "es_local": _es_local(),
+        }
+    )
+
+
+@app.route("/qr.svg")
+def api_qr():
+    if segno is None:
+        return jsonify({"error": "QR no disponible"}), 404
+    buf = io.BytesIO()
+    segno.make(_url_red(), error="m").save(buf, kind="svg", scale=6, dark="black", light="white")
+    return Response(buf.getvalue(), mimetype="image/svg+xml")
+
+
+@app.route("/apagar", methods=["POST"])
+def api_apagar():
+    # Solo desde la propia PC, y con un encabezado propio (evita que otra web lo dispare)
+    if not _es_local() or request.headers.get("X-Biblioteca") != "1":
+        return (
+            jsonify(
+                {
+                    "exito": False,
+                    "mensaje": "Solo se puede apagar desde la PC donde corre la biblioteca.",
+                }
+            ),
+            403,
+        )
+    threading.Timer(0.5, lambda: os._exit(0)).start()  # da tiempo a responder antes de cortar
+    return jsonify({"exito": True, "mensaje": "Servidor apagado."})
+
+
+if __name__ == "__main__":
     host_env = os.environ.get("FLASK_HOST", "0.0.0.0")
     port_env = int(os.environ.get("FLASK_PORT", 5000))
     url = f"http://{obtener_ip_local()}:{port_env}"
