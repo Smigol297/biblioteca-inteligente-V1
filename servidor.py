@@ -1,6 +1,7 @@
 import io
 import os
 import socket
+import sys          # <-- NUEVO
 import threading
 import webbrowser
 
@@ -15,6 +16,13 @@ try:
     import segno  # QR en Python puro; si no está instalada, la página funciona sin QR
 except ImportError:
     segno = None
+    # Monitor de salud: `python servidor.py --monitor` corre monitor.py y sale
+# antes de inicializar Flask, la base y el entrenamiento sobre datos reales.
+if "--monitor" in sys.argv:
+    from monitor import main as _monitor_main
+
+    sys.exit(_monitor_main())
+
 app = Flask(__name__)
 
 # Inicializar Base de datos al arrancar
