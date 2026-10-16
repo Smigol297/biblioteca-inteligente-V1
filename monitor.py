@@ -32,28 +32,89 @@ import database
 from buscador_service import BuscadorLocal, _coleccion_de
 from indexador_service import procesar_un_archivo
 
-
 # --- Vocabulario y conectores (sin tildes) ----------------------------------
 VOCABULARIO = {
     "programacion": [
-        "algoritmo", "variable", "bucle", "codigo", "compilar", "depurar",
-        "memoria", "programa", "ejecutar", "datos", "logica", "modulo",
-        "clase", "objeto", "metodo", "funcion", "cadena", "entero",
-        "puntero", "arreglo", "recursion", "iteracion", "compilador",
-        "interprete", "sentencia", "operador", "asignacion", "condicion",
+        "algoritmo",
+        "variable",
+        "bucle",
+        "codigo",
+        "compilar",
+        "depurar",
+        "memoria",
+        "programa",
+        "ejecutar",
+        "datos",
+        "logica",
+        "modulo",
+        "clase",
+        "objeto",
+        "metodo",
+        "funcion",
+        "cadena",
+        "entero",
+        "puntero",
+        "arreglo",
+        "recursion",
+        "iteracion",
+        "compilador",
+        "interprete",
+        "sentencia",
+        "operador",
+        "asignacion",
+        "condicion",
     ],
     "cocina": [
-        "harina", "huevos", "azucar", "manteca", "leche", "sal",
-        "mezclar", "batir", "hornear", "cocinar", "sarten", "horno",
-        "receta", "sabor", "ingrediente", "plato", "cuchara", "olla",
-        "hervir", "freir", "picar", "revolver", "amasar", "estirar",
-        "servir", "porcion", "condimento", "salsa",
+        "harina",
+        "huevos",
+        "azucar",
+        "manteca",
+        "leche",
+        "sal",
+        "mezclar",
+        "batir",
+        "hornear",
+        "cocinar",
+        "sarten",
+        "horno",
+        "receta",
+        "sabor",
+        "ingrediente",
+        "plato",
+        "cuchara",
+        "olla",
+        "hervir",
+        "freir",
+        "picar",
+        "revolver",
+        "amasar",
+        "estirar",
+        "servir",
+        "porcion",
+        "condimento",
+        "salsa",
     ],
 }
 
 CONECTORES = [
-    "y", "con", "para", "de", "en", "que", "el", "la", "los", "las",
-    "un", "una", "del", "al", "sobre", "entre", "sin", "por",
+    "y",
+    "con",
+    "para",
+    "de",
+    "en",
+    "que",
+    "el",
+    "la",
+    "los",
+    "las",
+    "un",
+    "una",
+    "del",
+    "al",
+    "sobre",
+    "entre",
+    "sin",
+    "por",
 ]
 
 # Reparto del corpus. La proporcion 13/12 mantiene ambas colecciones parejas.
@@ -142,6 +203,7 @@ def _rss_bytes():
         pass
     try:
         import resource
+
         return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024
     except Exception:
         return None
@@ -200,8 +262,11 @@ def _generar_corpus(libros_por_coleccion, paginas_por_libro, mapa_marcadores, se
             ruta = "%s/libro_%03d.txt" % (coleccion, i + 1)
             marcadores = mapa_marcadores[ruta]
             corpus[ruta] = _generar_libro(
-                rng, VOCABULARIO[coleccion], marcadores,
-                paginas_por_libro, PALABRAS_POR_PAGINA,
+                rng,
+                VOCABULARIO[coleccion],
+                marcadores,
+                paginas_por_libro,
+                PALABRAS_POR_PAGINA,
             )
     return corpus
 
@@ -349,12 +414,14 @@ def _medir_tiempos(buscador, casos, repeticiones):
                 pass
             tiempos.append((time.perf_counter() - t0) * 1000.0)
         tiempos.sort()
-        filas.append({
-            "query": caso["query"],
-            "min": tiempos[0],
-            "med": statistics.median(tiempos),
-            "max": tiempos[-1],
-        })
+        filas.append(
+            {
+                "query": caso["query"],
+                "min": tiempos[0],
+                "med": statistics.median(tiempos),
+                "max": tiempos[-1],
+            }
+        )
     return filas
 
 
@@ -376,14 +443,26 @@ def _imprimir_reporte(rep):
     print("MONITOR BIBLIOTECA INTELIGENTE - V1")
     print("=" * 78)
     sis = rep["sistema"]
-    print("Sistema:   %s | %s | Python %s | %d nucleos | %s RAM" % (
-        sis["so"], sis["arquitectura"], sis["python"],
-        sis["nucleos"], _fmt_gb(sis["ram_total_bytes"]),
-    ))
+    print(
+        "Sistema:   %s | %s | Python %s | %d nucleos | %s RAM"
+        % (
+            sis["so"],
+            sis["arquitectura"],
+            sis["python"],
+            sis["nucleos"],
+            _fmt_gb(sis["ram_total_bytes"]),
+        )
+    )
     c = rep["corpus"]
-    print("Corpus:    %d libros x %d paginas-generador (%d paginas DB) | %d caracteres" % (
-        c["libros"], c["paginas_por_libro"], c["paginas_db"], c["caracteres"],
-    ))
+    print(
+        "Corpus:    %d libros x %d paginas-generador (%d paginas DB) | %d caracteres"
+        % (
+            c["libros"],
+            c["paginas_por_libro"],
+            c["paginas_db"],
+            c["caracteres"],
+        )
+    )
     print("Semilla:   %d | Repeticiones: %d" % (c["semilla"], rep["_reps"]))
     print("-" * 78)
     print("CORRECTITUD")
@@ -391,10 +470,14 @@ def _imprimir_reporte(rep):
     print("{:<32} {:<11} {:<6} {}".format("consulta", "coleccion", "estado", "n"))
     print("-" * 78)
     for f in rep["correctitud"]["filas"]:
-        print("{:<32} {:<11} {:<6} {}".format(
-            f["query"][:32], (f["coleccion"] or "-")[:11],
-            "OK" if f["ok"] else "FALLA", f["n"],
-        ))
+        print(
+            "{:<32} {:<11} {:<6} {}".format(
+                f["query"][:32],
+                (f["coleccion"] or "-")[:11],
+                "OK" if f["ok"] else "FALLA",
+                f["n"],
+            )
+        )
         if not f["ok"]:
             print("    caso:   {}".format(f["descripcion"]))
             if f["error"]:
@@ -407,40 +490,64 @@ def _imprimir_reporte(rep):
                 print("    fuera:  {}".format(f["fuera"]))
     cc = rep["correctitud"]
     print("-" * 78)
-    print("VEREDICTO CORRECTITUD: {} ({} de {} consultas)".format(
-        "OK" if cc["ok"] else "FALLA", cc["pasadas"], cc["total"],
-    ))
+    print(
+        "VEREDICTO CORRECTITUD: {} ({} de {} consultas)".format(
+            "OK" if cc["ok"] else "FALLA",
+            cc["pasadas"],
+            cc["total"],
+        )
+    )
     print("-" * 78)
 
     print("RENDIMIENTO")
     print("-" * 78)
     arr = rep["arranque"]
-    print("Arranque:  carga_db=%.3fs  tfidf=%.3fs  total=%.3fs" % (
-        arr["carga_db_s"], arr["tfidf_s"], arr["total_s"],
-    ))
+    print(
+        "Arranque:  carga_db=%.3fs  tfidf=%.3fs  total=%.3fs"
+        % (
+            arr["carga_db_s"],
+            arr["tfidf_s"],
+            arr["total_s"],
+        )
+    )
     print("Busqueda (ms, %d reps/consulta):" % rep["_reps"])
     print("  {:<32} {:>8} {:>8} {:>8}".format("consulta", "min", "med", "max"))
     for f in rep["busqueda"]["filas"]:
-        print("  {:<32} {:>8.1f} {:>8.1f} {:>8.1f}".format(
-            f["query"][:32], f["min"], f["med"], f["max"],
-        ))
-    print("  {:<32} {:>8.1f} {:>8.1f} {:>8.1f}".format(
-        "AGREGADO", rep["busqueda"]["min"], rep["busqueda"]["med"], rep["busqueda"]["max"],
-    ))
+        print(
+            "  {:<32} {:>8.1f} {:>8.1f} {:>8.1f}".format(
+                f["query"][:32],
+                f["min"],
+                f["med"],
+                f["max"],
+            )
+        )
+    print(
+        "  {:<32} {:>8.1f} {:>8.1f} {:>8.1f}".format(
+            "AGREGADO",
+            rep["busqueda"]["min"],
+            rep["busqueda"]["med"],
+            rep["busqueda"]["max"],
+        )
+    )
     mem = rep["memoria"]
-    print("Memoria:   RSS tras entrenar=%s | pico=%s" % (
-        _fmt_mb(mem["rss_tras_entrenar_bytes"]),
-        _fmt_mb(mem["rss_pico_bytes"]),
-    ))
+    print(
+        "Memoria:   RSS tras entrenar=%s | pico=%s"
+        % (
+            _fmt_mb(mem["rss_tras_entrenar_bytes"]),
+            _fmt_mb(mem["rss_pico_bytes"]),
+        )
+    )
     print("-" * 78)
     v = rep["veredicto"]
     print("Veredicto latencia:   {}".format(v["latencia"]))
     print("Veredicto memoria:    {}".format(v["memoria"]))
     print("Veredicto arranque:   {}".format(v["arranque"]))
     print("VEREDICTO GLOBAL:     {}".format(v["global"]))
-    print("RAM recomendada:      {}".format(
-        "{} MB".format(v["ram_recomendada_mb"]) if v["ram_recomendada_mb"] else "-"
-    ))
+    print(
+        "RAM recomendada:      {}".format(
+            "{} MB".format(v["ram_recomendada_mb"]) if v["ram_recomendada_mb"] else "-"
+        )
+    )
     print("=" * 78)
 
 
@@ -448,9 +555,12 @@ def _imprimir_reporte(rep):
 def main(argv=None):
     p = argparse.ArgumentParser(prog="monitor.py")
     p.add_argument("--libros", type=int, default=25)
-    p.add_argument("--paginas", type=int, default=300,
-                   help="paginas-generador por libro (se dividen cada %d lineas)"
-                        % LINEAS_POR_PAGINA_DB)
+    p.add_argument(
+        "--paginas",
+        type=int,
+        default=300,
+        help="paginas-generador por libro (se dividen cada %d lineas)" % LINEAS_POR_PAGINA_DB,
+    )
     p.add_argument("--repeticiones", type=int, default=3)
     p.add_argument("--json", metavar="ARCHIVO")
     args, _ = p.parse_known_args(argv)
@@ -479,9 +589,7 @@ def main(argv=None):
 
         libros_por_coleccion = _repartir_libros(args.libros, PROP_COLECCIONES)
         mapa_marcadores = _asignar_marcadores(libros_por_coleccion)
-        corpus = _generar_corpus(
-            libros_por_coleccion, args.paginas, mapa_marcadores, SEMILLA
-        )
+        corpus = _generar_corpus(libros_por_coleccion, args.paginas, mapa_marcadores, SEMILLA)
         caracteres = sum(len(pg) for pgs in corpus.values() for pg in pgs)
         _escribir_corpus(carpeta_pdfs, corpus)
 
@@ -498,7 +606,7 @@ def main(argv=None):
         buscador = BuscadorLocal()
 
         t0 = time.perf_counter()
-        filas = database.obtener_todas_las_paginas()
+        # filas = database.obtener_todas_las_paginas()
         t_carga = time.perf_counter() - t0
 
         # fit_transform se hace dentro de entrenar_modelo; medimos el bloque entero.
@@ -514,7 +622,7 @@ def main(argv=None):
         casos = _casos_correctitud(mapa_marcadores)
         filas_corr = [_evaluar_correctitud(buscador, c) for c in casos]
         pasadas = sum(1 for f in filas_corr if f["ok"])
-        correctitud_ok = (pasadas == len(filas_corr))
+        correctitud_ok = pasadas == len(filas_corr)
 
         # 5. Rendimiento (repeticiones, min/med/max).
         filas_med = _medir_tiempos(buscador, casos, args.repeticiones)

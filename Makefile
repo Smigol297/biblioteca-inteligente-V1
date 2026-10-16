@@ -3,16 +3,19 @@ GID := $(shell id -g)
 
 .PHONY: all linux32 windows clean test lint format
 
-all: linux32 windows
+all_CI: test format lint
 
 test:
 	pytest
 lint:
-   	black --check . && isort --check-only . && flake8
+	black --check .
+	isort --check-only .
+	flake8 .
 format:
-   	black . && isort .
+	black . 
+	isort .
 
-linux32:
+linux32_executable:
 	docker build --platform linux/386 -t biblioteca-linux32 -f docker/Dockerfile.linux32 .
 	mkdir -p dist/linux32
 	docker run --rm --platform linux/386 -e HOST_UID=$(UID) -e HOST_GID=$(GID) -v "$(CURDIR)/dist/linux32:/out" biblioteca-linux32

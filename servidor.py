@@ -1,7 +1,7 @@
 import io
 import os
 import socket
-import sys          # <-- NUEVO
+import sys  # <-- NUEVO
 import threading
 import webbrowser
 
